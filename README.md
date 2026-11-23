@@ -48,7 +48,7 @@
 
 ### Авторы и лицензия
 - **Оригинальный мод:** [Vampirism](https://github.com/TeamLapen/Vampirism) — maxanier, cheaterpaul и участники TeamLapen
-- **Порт на Fabric:** этот форк
+- **Порт на Fabric:** ZombieOcupantDigital
 - **Лицензия кода:** [LGPL-3.0](https://www.gnu.org/licenses/lgpl-3.0), как у оригинала. Исходный код форка публикуется вместе с релизами
 - Текстуры и модели — от авторов Vampirism; их лицензия прямо разрешает использование в форках. Звуки распространяются по своим лицензиям (CC Attribution и др., см. оригинальный README)
 
@@ -97,7 +97,7 @@ The port bundles a compatibility layer that implements the parts of the Forge AP
 
 ### Credits and license
 - **Original mod:** [Vampirism](https://github.com/TeamLapen/Vampirism) by maxanier, cheaterpaul and the TeamLapen contributors
-- **Fabric port:** this fork
+- **Fabric port:** ZombieOcupantDigital
 - **Code license:** [LGPL-3.0](https://www.gnu.org/licenses/lgpl-3.0), same as the original. The fork's source code is published alongside every release
 - Textures and models come from the Vampirism authors; their license explicitly allows use in forks. Sounds are under their own licenses (CC Attribution and others, see the original README)
 
