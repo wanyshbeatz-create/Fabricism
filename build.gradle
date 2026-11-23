@@ -1,0 +1,103 @@
+plugins {
+    id 'fabric-loom' version '1.11.8'
+    id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+base { archivesName = 'vampirism-fabric' }
+
+repositories {
+    maven { url = 'https://api.modrinth.com/maven'; content { includeGroup 'maven.modrinth' } }
+    mavenCentral()
+}
+
+loom {
+    accessWidenerPath = file('src/main/resources/vampirism.accesswidener')
+    mixin { defaultRefmapName = 'vampirism.refmap.json' }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+    modApi "maven.modrinth:forge-config-api-port:v${project.fcap_version}-1.20.1-Fabric"
+    include "maven.modrinth:forge-config-api-port:v${project.fcap_version}-1.20.1-Fabric"
+    implementation "org.apache.maven:maven-artifact:3.8.5"
+    compileOnly "com.google.code.findbugs:jsr305:3.0.2"
+    include "org.apache.maven:maven-artifact:3.8.5"
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') { filter { line -> line.replace('${version}', project.version.toString()) } }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 17
+    it.options.encoding = 'UTF-8'
+    it.options.compilerArgs += ['-Xmaxerrs', '100000']
+}
+
+java { withSourcesJar() }
+
+jar { from('CODE_LICENSE') { rename { "LICENSE_vampirism" } } }
+
+// Forge's RuntimeDistCleaner also strips lambda bodies that belong to @OnlyIn(CLIENT) methods.
+// Fabric Loader does not, so mark synthetic lambdas referenced from @Environment(CLIENT) methods as client-only too.
+import org.objectweb.asm.*
+import org.objectweb.asm.tree.*
+tasks.named('compileJava').configure {
+    doLast {
+        def envDesc = 'Lnet/fabricmc/api/Environment;'
+        def root = destinationDirectory.get().asFile
+        int marked = 0
+        root.eachFileRecurse { File f ->
+            if (!f.name.endsWith('.class')) return
+            ClassNode cn = new ClassNode()
+            new ClassReader(f.bytes).accept(cn, 0)
+            def isClient = { MethodNode m -> (m.invisibleAnnotations ?: []).any { it.desc == envDesc } }
+            def byName = [:]
+            cn.methods.each { byName[it.name + it.desc] = it }
+            def queue = cn.methods.findAll { isClient(it) }
+            def seen = new HashSet()
+            boolean changed = false
+            while (!queue.isEmpty()) {
+                MethodNode m = queue.remove(0)
+                if (!seen.add(m.name + m.desc)) continue
+                m.instructions.each { insn ->
+                    if (insn instanceof InvokeDynamicInsnNode) {
+                        insn.bsmArgs.each { arg ->
+                            if (arg instanceof Handle && arg.owner == cn.name && arg.name.startsWith('lambda$')) {
+                                MethodNode target = byName[arg.name + arg.desc]
+                                if (target != null && !isClient(target)) {
+                                    AnnotationNode an = new AnnotationNode(envDesc)
+                                    an.values = ['value', ['Lnet/fabricmc/api/EnvType;', 'CLIENT'] as String[]]
+                                    if (target.invisibleAnnotations == null) target.invisibleAnnotations = []
+                                    target.invisibleAnnotations.add(an)
+                                    changed = true; marked++
+                                }
+                                if (target != null) queue.add(target)
+                            }
+                        }
+                    }
+                }
+            }
+            if (changed) {
+                ClassWriter cw = new ClassWriter(0)
+                cn.accept(cw)
+                f.bytes = cw.toByteArray()
+            }
+        }
+        logger.lifecycle("Marked ${marked} client-only lambdas")
+    }
+}
+
+tasks.register("prodClient", net.fabricmc.loom.task.prod.ClientProductionRunTask) {
+    mods.from(remapJar.archiveFile)
+    mods.from(project.configurations.detachedConfiguration(project.dependencies.create("net.fabricmc.fabric-api:fabric-api:${project.fabric_version}")).setTransitive(false))
+    jvmArgs.add("-Xmx3G")
+    programArgs.addAll(["--quickPlaySingleplayer", "world"])
+    runDir.set(file("prodrun"))
+}
